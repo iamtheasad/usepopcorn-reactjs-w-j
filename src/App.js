@@ -54,7 +54,7 @@ const average = (arr) =>
 const KEY = "9966f411";
 
 export default function App() {
-  const [query, setQuery] = useState("Inception");
+  const [query, setQuery] = useState("");
   const [movies, setMovies] = useState([]);
   const [watched, setWatched] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -90,8 +90,11 @@ export default function App() {
     setWatched((watched) => watched.filter((movie) => movie.imdbID !== id));
   }
 
+  // We can also use it as a event handler function instead of useEffect
   useEffect(
     function () {
+      const controller = new AbortController();
+
       async function fetchMovies() {
         try {
           setIsLoading(true);
@@ -101,6 +104,9 @@ export default function App() {
 
           const res = await fetch(
             `https://www.omdbapi.com/?apikey=${KEY}&s=${query}`,
+            {
+              signal: controller.signal,
+            },
           );
 
           // When api cant fetch anything show this error
@@ -117,9 +123,12 @@ export default function App() {
           }
 
           setMovies(data.Search);
+          setError("");
         } catch (err) {
-          console.error(err.message);
-          setError(err.message);
+          if (err.name !== "AbortError") {
+            console.log(err.message);
+            setError(err.message);
+          }
         } finally {
           // It will run always on the last
           setIsLoading(false);
@@ -133,7 +142,12 @@ export default function App() {
         return;
       }
 
+      handleCloseMovie(); // Before new search closing the movie details component
       fetchMovies();
+
+      return function () {
+        controller.abort();
+      };
     },
     [query],
   );
@@ -330,6 +344,25 @@ function MovieDetails({ selectedId, onCloseMovie, onAddWatched, watched }) {
 
   useEffect(
     function () {
+      function callBack(e) {
+        if (e.code === "Escape") {
+          onCloseMovie();
+          console.log("Closing");
+        }
+      }
+
+      document.addEventListener("keydown", callBack);
+
+      // Cleaning the addEventlistener from the DOM
+      return function () {
+        document.removeEventListener("keydown", callBack);
+      };
+    },
+    [onCloseMovie],
+  );
+
+  useEffect(
+    function () {
       async function getMovieDetails() {
         setIsLoading(true);
         const res = await fetch(
@@ -347,13 +380,15 @@ function MovieDetails({ selectedId, onCloseMovie, onAddWatched, watched }) {
 
   useEffect(
     function () {
-      if (!title) return;
+      if (!title) return; // If title are undefined, return it
       document.title = `Movie | ${title}`;
 
       // Effect cleanup function
+      // This cleanup function run after the effect unmount
+      // But variable value still can access because of js closure
       return function () {
         document.title = "usePopcorn";
-        console.log(`Cleanup ${title}`);
+        // console.log(`Clean up ${title}`);
       };
     },
     [title],
